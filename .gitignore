@@ -1,0 +1,26 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# Build results
+*.dll
+*.exe
+*.app
+*.log
+
+# VS Code
+.vscode/
+
+# SQLite DB
+*.db
+
+# Rider
+.idea/
+
+# Test Results
+TestResults/
+
+# Others
+.env
