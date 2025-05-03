@@ -22,19 +22,16 @@ public class OverdueTaskUpdater(
                 using var scope = scopeFactory.CreateScope();
                 var repository = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
 
-                var tasks = await repository.GetAllAsync();
+                var tasks = await repository.GetTasksToMarkOverdueAsync();
                 var now = DateTime.UtcNow;
 
                 int updated = 0;
 
                 foreach (var task in tasks)
                 {
-                    if (task.Status != TaskStatus.Completed && task.Status != TaskStatus.Overdue &&
-                        task.Deadline < now)
-                    {
-                        task.Status = TaskStatus.Overdue;
-                        updated++;
-                    }
+
+                    task.Status = TaskStatus.Overdue;
+                    updated++;
                 }
 
                 if (updated > 0)

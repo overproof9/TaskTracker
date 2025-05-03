@@ -22,7 +22,7 @@ public class OverdueTaskUpdaterTests
         };
 
         var repoMock = new Mock<ITaskRepository>();
-        repoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<TaskItem> { task });
+        repoMock.Setup(r => r.GetTasksToMarkOverdueAsync()).ReturnsAsync([task]);
 
         var provider = new Mock<IServiceProvider>();
         provider.Setup(p => p.GetService(typeof(ITaskRepository))).Returns(repoMock.Object);
@@ -44,45 +44,15 @@ public class OverdueTaskUpdaterTests
         // Assert
         Assert.Equal(TaskStatus.Overdue, task.Status);
         repoMock.Verify(r => r.SaveChangesAsync(), Times.AtLeastOnce);
-    }
-
-    [Fact]
-    public async Task CompletedTask_IsNotModified()
-    {
-        var task = new TaskItem
-        {
-            Id = Guid.NewGuid(),
-            Status = TaskStatus.Completed,
-            Deadline = DateTime.UtcNow.AddMinutes(-10)
-        };
-
-        var repoMock = new Mock<ITaskRepository>();
-        repoMock.Setup(r => r.GetAllAsync()).ReturnsAsync(new List<TaskItem> { task });
-
-        var provider = new Mock<IServiceProvider>();
-        provider.Setup(p => p.GetService(typeof(ITaskRepository))).Returns(repoMock.Object);
-
-        var scope = new Mock<IServiceScope>();
-        scope.Setup(s => s.ServiceProvider).Returns(provider.Object);
-
-        var scopeFactory = new Mock<IServiceScopeFactory>();
-        scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
-
-        var logger = new Mock<ILogger<OverdueTaskUpdater>>();
-        var service = new OverdueTaskUpdater(scopeFactory.Object, logger.Object);
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        await service.StartAsync(cts.Token);
-
-        repoMock.Verify(r => r.SaveChangesAsync(), Times.Never);
-        Assert.Equal(TaskStatus.Completed, task.Status);
+        repoMock.Verify(r => r.GetTasksToMarkOverdueAsync(), Times.Once);
+        repoMock.VerifyNoOtherCalls();
     }
 
     [Fact]
     public async Task Exception_IsCaught_AndLogged()
     {
         var repoMock = new Mock<ITaskRepository>();
-        repoMock.Setup(r => r.GetAllAsync()).ThrowsAsync(new Exception("test"));
+        repoMock.Setup(r => r.GetTasksToMarkOverdueAsync()).ThrowsAsync(new Exception("test"));
 
         var provider = new Mock<IServiceProvider>();
         provider.Setup(p => p.GetService(typeof(ITaskRepository))).Returns(repoMock.Object);
@@ -108,5 +78,50 @@ public class OverdueTaskUpdaterTests
                 It.IsAny<Func<It.IsAnyType, Exception, string>>()),
             Times.AtLeastOnce
         );
+        repoMock.Verify(r => r.GetTasksToMarkOverdueAsync(), Times.Once);
+        repoMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task NoTasksToUpdate_DoesNotCallSaveChanges()
+    {
+        // Arrange
+        var repoMock = new Mock<ITaskRepository>();
+        repoMock
+            .Setup(r => r.GetTasksToMarkOverdueAsync())
+            .ReturnsAsync([]);
+
+        var provider = new Mock<IServiceProvider>();
+        provider.Setup(p => p.GetService(typeof(ITaskRepository))).Returns(repoMock.Object);
+
+        var scope = new Mock<IServiceScope>();
+        scope.Setup(s => s.ServiceProvider).Returns(provider.Object);
+
+        var scopeFactory = new Mock<IServiceScopeFactory>();
+        scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
+
+        var loggerMock = new Mock<ILogger<OverdueTaskUpdater>>();
+
+        var service = new OverdueTaskUpdater(scopeFactory.Object, loggerMock.Object);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        // Act
+        await service.StartAsync(cts.Token);
+
+        // Assert
+        repoMock.Verify(r => r.SaveChangesAsync(), Times.Never);
+        loggerMock.Verify(
+            l => l.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("No new overdue tasks")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce
+        );
+
+        repoMock.Verify(r => r.GetTasksToMarkOverdueAsync(), Times.Once);
+        repoMock.VerifyNoOtherCalls();
     }
 }

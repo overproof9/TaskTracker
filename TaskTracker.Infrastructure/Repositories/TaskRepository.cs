@@ -12,4 +12,13 @@ public class TaskRepository(AppDbContext context) : GenericRepository<TaskItem>(
             .Where(t => t.Deadline < DateTime.UtcNow && t.Status != Domain.Enums.TaskStatus.Completed)
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<TaskItem>> GetTasksToMarkOverdueAsync()
+    {
+        return await _dbSet
+            .Where(t => t.Status != Domain.Enums.TaskStatus.Completed &&
+                        t.Status != Domain.Enums.TaskStatus.Overdue &&
+                        t.Deadline < DateTime.UtcNow)
+            .ToListAsync();
+    }
 }
